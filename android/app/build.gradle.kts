@@ -6,12 +6,14 @@ plugins {
 }
 
 android {
-    namespace = "com.example.tficmobileapp"
+    namespace = "com.tfic.tficmobileapp"
     compileSdk = flutter.compileSdkVersion
+    ndkVersion = "27.0.12077973"
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
+        isCoreLibraryDesugaringEnabled = true // ✅ ADD THIS LINE
     }
 
     kotlinOptions {
@@ -19,8 +21,8 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.example.tficmobileapp"
-        minSdk = flutter.minSdkVersion
+        applicationId = "com.tfic.tficmobileapp"
+        minSdk = 21 // ← 👈 bump this from 16 to at least 21
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
@@ -41,3 +43,8 @@ android {
 flutter {
     source = "../.."
 }
+dependencies {
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.4")
+}
+
+apply(plugin = "com.google.gms.google-services")

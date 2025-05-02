@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "268591173187",
+    "project_id": "tfic-mobile-app",
+    "storage_bucket": "tfic-mobile-app.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:268591173187:android:7b068e0cb6f310489e8ef6",
+        "android_client_info": {
+          "package_name": "com.tfic.tficmobileapp"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBvqvPUXLt84Mk_W0t2-ICxJ6JmYv0Vehk"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
