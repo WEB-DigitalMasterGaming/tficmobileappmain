@@ -62,6 +62,8 @@ Future<void> main() async {
   await setupFirebaseMessaging();
   setupMessageListeners();
 
+  await FirebaseMessaging.instance.subscribeToTopic("events"); // ✅ Subscribes to "events"
+  
   final fcmToken = await FirebaseMessaging.instance.getToken();
   print('📲 FCM Token: $fcmToken');
 
