@@ -135,9 +135,26 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         _infoRow('Discord', userData?['discordName']),
                         _infoRow('Game Name', userData?['gameUserName']),
                         _infoRow('Role', userData?['role']),
-                        _infoRow('Primary Position', userData?['primaryPositionTitle']),
-                        _infoRow('Secondary', userData?['secondaryPositionTitle']),
-                        _infoRow('Tertiary', userData?['tertiaryPositionTitle']),
+                        if (userData?['primaryPositionTitle'] != null ||
+                            userData?['secondaryPositionTitle'] != null ||
+                            userData?['tertiaryPositionTitle'] != null)
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const SizedBox(height: 12),
+                              const Text(
+                                'Your Positions',
+                                style: TextStyle(color: Colors.white70, fontWeight: FontWeight.bold),
+                              ),
+                              const SizedBox(height: 6),
+                              if (userData?['primaryPositionTitle'] != null)
+                                _positionTag('Primary', userData!['primaryPositionTitle']),
+                              if (userData?['secondaryPositionTitle'] != null)
+                                _positionTag('Secondary', userData!['secondaryPositionTitle']),
+                              if (userData?['tertiaryPositionTitle'] != null)
+                                _positionTag('Tertiary', userData!['tertiaryPositionTitle']),
+                            ],
+                          ),
                         const SizedBox(height: 12),
                         if (userData?['flags'] != null && userData!['flags'].isNotEmpty)
                           Wrap(
@@ -244,15 +261,49 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 2),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Text(
             '$label: ',
             style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.grey),
           ),
-          Text(value.toString(), style: const TextStyle(color: Colors.white)),
+          Flexible(
+            child: Text(
+              value.toString(),
+              style: const TextStyle(color: Colors.white),
+              overflow: TextOverflow.ellipsis,
+              softWrap: true,
+            ),
+          ),
         ],
       ),
     );
   }
+
+    Widget _positionTag(String label, String value) {
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.deepPurple.withOpacity(0.1),
+        border: Border.all(color: Colors.deepPurpleAccent.withOpacity(0.5)),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.badge, size: 18, color: Colors.deepPurpleAccent),
+          const SizedBox(width: 8),
+          Flexible(
+            child: Text(
+              '$label: $value',
+              style: const TextStyle(color: Colors.white),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
 }
