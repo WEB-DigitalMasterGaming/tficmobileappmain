@@ -76,28 +76,54 @@ Future<void> main() async {
 
 class MyApp extends StatelessWidget {
   @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'TFIC Mobile',
-      theme: ThemeData.dark(),
-      debugShowCheckedModeBanner: false,
-      routes: {
-        '/dashboard': (context) => const DashboardScreen(),
-        '/login': (context) => LoginScreen(),
-        '/all-events': (context) => const AllEventsScreen(),
-      },
-      home: FutureBuilder<bool>(
-        future: AuthStorage.hasToken(),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Scaffold(body: Center(child: CircularProgressIndicator()));
-          } else if (snapshot.data == true) {
-            return const DashboardScreen();
-          } else {
-            return LoginScreen();
-          }
+    Widget build(BuildContext context) {
+      return MaterialApp(
+        title: 'TFIC Mobile',
+        debugShowCheckedModeBanner: false,
+        theme: ThemeData.dark().copyWith(
+          scaffoldBackgroundColor: const Color(0xFF1A1A28),
+          cardColor: const Color(0xFF1E1E2E),
+          primaryColor: accentBlue,
+          colorScheme: const ColorScheme.dark(
+            primary: accentBlue,
+            secondary: accentBlue,
+          ),
+          elevatedButtonTheme: ElevatedButtonThemeData(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: accentBlue,
+              foregroundColor: Colors.white,
+            ),
+          ),
+          textButtonTheme: TextButtonThemeData(
+            style: TextButton.styleFrom(
+              foregroundColor: accentBlue,
+            ),
+          ),
+          iconTheme: const IconThemeData(color: accentBlue),
+          appBarTheme: const AppBarTheme(
+            backgroundColor: Color(0xFF1A1A28),
+            iconTheme: IconThemeData(color: accentBlue),
+            titleTextStyle: TextStyle(color: Colors.white, fontSize: 20),
+          ),
+        ),
+        routes: {
+          '/dashboard': (context) => const DashboardScreen(),
+          '/login': (context) => LoginScreen(),
+          '/all-events': (context) => const AllEventsScreen(),
         },
-      ),
-    );
-  }
+        home: FutureBuilder<bool>(
+          future: AuthStorage.hasToken(),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const Scaffold(body: Center(child: CircularProgressIndicator()));
+            } else if (snapshot.data == true) {
+              return const DashboardScreen();
+            } else {
+              return LoginScreen();
+            }
+          },
+        ),
+      );
+    }
+
 }

@@ -1,0 +1,6 @@
+
+name: flutter_local_notifications_linux
+description: Dummy plugin to bypass build for Linux platform
+version: 1.0.0
+environment:
+  sdk: '>=2.12.0 <3.0.0'

@@ -5,6 +5,8 @@ import 'package:tficmobileapp/utils/auth_storage.dart';
 import 'login_screen.dart';
 import 'package:intl/intl.dart';
 
+const Color accentBlue = Color(0xFF3DAEFF); // neon-style blue
+
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
 
@@ -27,12 +29,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final user = await ApiService.getUserProfile();
     final events = await ApiService.getMyRsvpEvents();
 
+    events.sort((a, b) => DateTime.parse(a['start']).compareTo(DateTime.parse(b['start']))); // 👈 Sort by start time
+
     setState(() {
       userData = user;
       userEvents = events;
       isLoading = false;
     });
   }
+
 
   void logout() async {
     await AuthStorage.clearToken();
@@ -59,7 +64,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             children: [
               Text('Time: $formatted', style: const TextStyle(color: Colors.white70)),
               const SizedBox(height: 8),
-              Text('Your Role: ${event['role'] ?? 'Unknown'}', style: const TextStyle(color: Colors.deepPurpleAccent)),
+              Text('Your Role: ${event['role'] ?? 'Unknown'}', style: const TextStyle(color: accentBlue)),
               const SizedBox(height: 16),
               if (event['description'] != null)
               Padding(
@@ -68,7 +73,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   data: event['description'],
                   style: {
                     '*': Style(color: Colors.white),
-                    'strong': Style(color: Colors.deepPurpleAccent, fontWeight: FontWeight.bold),
+                    'strong': Style(color: accentBlue, fontWeight: FontWeight.bold),
                     'p': Style(color: Colors.white),
                     'li': Style(color: Colors.white),
                   },
@@ -85,7 +90,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Close', style: TextStyle(color: Colors.deepPurpleAccent)),
+            child: const Text('Close', style: TextStyle(color: accentBlue)),
           ),
         ],
       ),
@@ -132,44 +137,72 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               ?.copyWith(color: Colors.white),
                         ),
                         const SizedBox(height: 8),
-                        _infoRow('Discord', userData?['discordName']),
-                        _infoRow('Game Name', userData?['gameUserName']),
-                        _infoRow('Role', userData?['role']),
-                        if (userData?['primaryPositionTitle'] != null ||
-                            userData?['secondaryPositionTitle'] != null ||
-                            userData?['tertiaryPositionTitle'] != null)
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const SizedBox(height: 12),
-                              const Text(
-                                'Your Positions',
-                                style: TextStyle(color: Colors.white70, fontWeight: FontWeight.bold),
+                        Container(
+                          margin: const EdgeInsets.only(top: 24),
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF2A2A40),
+                            borderRadius: BorderRadius.circular(16),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withOpacity(0.2),
+                                blurRadius: 12,
+                                offset: const Offset(0, 4),
                               ),
-                              const SizedBox(height: 6),
-                              if (userData?['primaryPositionTitle'] != null)
-                                _positionTag('Primary', userData!['primaryPositionTitle']),
-                              if (userData?['secondaryPositionTitle'] != null)
-                                _positionTag('Secondary', userData!['secondaryPositionTitle']),
-                              if (userData?['tertiaryPositionTitle'] != null)
-                                _positionTag('Tertiary', userData!['tertiaryPositionTitle']),
                             ],
                           ),
-                        const SizedBox(height: 12),
-                        if (userData?['flags'] != null && userData!['flags'].isNotEmpty)
-                          Wrap(
-                            spacing: 8,
-                            runSpacing: 8,
-                            children: List<Widget>.from(
-                              userData!['flags'].map<Widget>(
-                                (flag) => Chip(
-                                  label: Text(flag, style: const TextStyle(color: Colors.white)),
-                                  backgroundColor: Colors.deepPurpleAccent,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Center(
+                                child: Text(
+                                  'User Information',
+                                  style: TextStyle(color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 16),
                                 ),
                               ),
-                            ),
+                              const SizedBox(height: 12),
+                              _infoRow('Game Name', userData?['gameUserName']),
+                              _infoRow('Discord', userData?['discordName']),
+                              _infoRow('Role', userData?['role']),
+                            ],
                           ),
-
+                        ),
+                        if (userData?['primaryPositionTitle'] != null ||
+                          userData?['secondaryPositionTitle'] != null ||
+                          userData?['tertiaryPositionTitle'] != null)
+                        Container(
+                          margin: const EdgeInsets.only(top: 16),
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF2A2A40),
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text('Your Positions', style: TextStyle(color: Colors.white70, fontWeight: FontWeight.bold)),
+                              const SizedBox(height: 12),
+                              if (userData?['primaryPositionTitle'] != null)
+                                _positionButton(
+                                  'Primary',
+                                  userData!['primaryPositionTitle'] ?? 'Unknown',
+                                  userData!['primaryPositionDescription'] ?? 'No description provided.',
+                                ),
+                              if (userData?['secondaryPositionTitle'] != null)
+                                _positionButton(
+                                  'Secondary',
+                                  userData!['secondaryPositionTitle'] ?? 'Unknown',
+                                  userData!['secondaryPositionDescription'] ?? 'No description provided.',
+                                ),
+                              if (userData?['tertiaryPositionTitle'] != null)
+                                _positionButton(
+                                  'Tertiary',
+                                  userData!['tertiaryPositionTitle'] ?? 'Unknown',
+                                  userData!['tertiaryPositionDescription'] ?? 'No description provided.',
+                                ),
+                            ],
+                          ),
+                        ),
                         const SizedBox(height: 24),
                         Align(
                           alignment: Alignment.centerRight,
@@ -178,7 +211,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               await Navigator.pushNamed(context, '/all-events');
                               fetchUser(); // 🔄 Refresh your RSVP data after returning
                             },
-                            child: const Text('View All Events', style: TextStyle(color: Colors.deepPurpleAccent)),
+                            child: const Text('View All Events', style: TextStyle(color: accentBlue)),
                           ),
                         ),
                         if (userEvents.isEmpty)
@@ -196,7 +229,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                 decoration: BoxDecoration(
                                   color: const Color(0xFF2A2A40),
                                   borderRadius: BorderRadius.circular(8),
-                                  border: Border.all(color: Colors.deepPurpleAccent.withOpacity(0.5)),
+                                  border: Border.all(color: accentBlue.withOpacity(0.5)),
                                 ),
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -213,12 +246,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                               event['roleIcon'],
                                               width: 20,
                                               height: 20,
-                                              errorBuilder: (_, __, ___) => const Icon(Icons.person, size: 20, color: Colors.deepPurpleAccent),
+                                              errorBuilder: (_, __, ___) => const Icon(Icons.person, size: 20, color: accentBlue),
                                             ),
                                           ),
                                         Text(
                                           'Role: ${event['role'] ?? 'Unknown'}',
-                                          style: const TextStyle(color: Colors.deepPurpleAccent),
+                                          style: const TextStyle(color: accentBlue),
                                         ),
                                       ],
                                     ),
@@ -280,19 +313,60 @@ class _DashboardScreenState extends State<DashboardScreen> {
       ),
     );
   }
+  Widget _positionButton(String label, String title, String description) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: ElevatedButton.icon(
+        icon: const Icon(Icons.info_outline, size: 18),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: accentBlue.withOpacity(0.15),
+          foregroundColor: accentBlue,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        ),
+        label: Text('$label: $title', style: const TextStyle(fontWeight: FontWeight.bold)),
+        onPressed: () {
+          showDialog(
+            context: context,
+            builder: (_) => AlertDialog(
+              backgroundColor: const Color(0xFF1E1E2E),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              title: Text('$label Position', style: const TextStyle(color: Colors.white)),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, style: const TextStyle(color: accentBlue, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 12),
+                  Text(description, style: const TextStyle(color: Colors.white70)),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('Close', style: TextStyle(color: accentBlue)),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
 
-    Widget _positionTag(String label, String value) {
+
+  Widget _positionTag(String label, String value) {
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 4),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
-        color: Colors.deepPurple.withOpacity(0.1),
-        border: Border.all(color: Colors.deepPurpleAccent.withOpacity(0.5)),
+        color: accentBlue.withOpacity(0.1),
+        border: Border.all(color: accentBlue.withOpacity(0.5)),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Row(
         children: [
-          const Icon(Icons.badge, size: 18, color: Colors.deepPurpleAccent),
+          const Icon(Icons.badge, size: 18, color: accentBlue),
           const SizedBox(width: 8),
           Flexible(
             child: Text(

@@ -20,13 +20,17 @@ class _AllEventsScreenState extends State<AllEventsScreen> {
     fetchEvents();
   }
 
-  Future<void> fetchEvents() async {
+ Future<void> fetchEvents() async {
     final events = await ApiService.getAllEvents();
+
+    events.sort((a, b) => DateTime.parse(a['start']).compareTo(DateTime.parse(b['start']))); // 👈 Sort chronologically
+
     setState(() {
       allEvents = events;
       isLoading = false;
     });
   }
+
 
   void _showEventDetailsModal(Map<String, dynamic> event) {
     final localStart = DateTime.parse(event['start']).toLocal();

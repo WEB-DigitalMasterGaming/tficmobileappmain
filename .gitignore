@@ -54,4 +54,5 @@ ios/Flutter/Flutter.podspec
 # Credentials and config
 *.keystore
 .env
+key.properties
 
