@@ -1,0 +1,911 @@
+import 'package:flutter/material.dart';
+import 'package:tficmobileapp/services/api_service.dart';
+import 'package:tficmobileapp/utils/auth_storage.dart';
+import 'package:tficmobileapp/config/theme.dart';
+import 'package:tficmobileapp/widgets/dashboard_widgets.dart';
+import 'login_screen.dart';
+import 'package:intl/intl.dart';
+
+class DashboardScreen extends StatefulWidget {
+  const DashboardScreen({super.key});
+
+  @override
+  State<DashboardScreen> createState() => _DashboardScreenState();
+}
+
+class _DashboardScreenState extends State<DashboardScreen> {
+  Map<String, dynamic>? userData;
+  List<Map<String, dynamic>> userEvents = [];
+  bool isLoading = true;
+  int upcomingEventsCount = 0;
+  int activeMissionsCount = 0; // Placeholder for future missions feature
+
+  @override
+  void initState() {
+    super.initState();
+    fetchUser();
+  }
+
+  Future<void> fetchUser() async {
+    final user = await ApiService.getUserProfile();
+    final events = await ApiService.getMyRsvpEvents();
+
+    events.sort((a, b) => DateTime.parse(a['start']).compareTo(DateTime.parse(b['start'])));
+
+    setState(() {
+      userData = user;
+      userEvents = events;
+      upcomingEventsCount = events.length;
+      isLoading = false;
+    });
+  }
+
+
+  void logout() async {
+    await AuthStorage.clearToken();
+    if (!mounted) return;
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(builder: (_) => LoginScreen()),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Row(
+          children: [
+            if (userData?['avatarUrl'] != null && userData!['avatarUrl'].toString().isNotEmpty)
+              CircleAvatar(
+                radius: 16,
+                backgroundImage: NetworkImage(
+                  userData!['avatarUrl'].toString().startsWith('http')
+                    ? userData!['avatarUrl']
+                    : 'http://10.0.2.2:5000${userData!['avatarUrl']}',
+                ),
+              ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    userData?['username'] ?? 'TFIC Dashboard',
+                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  if (userData?['role'] != null)
+                    Text(
+                      userData!['role'],
+                      style: const TextStyle(fontSize: 11, color: textMuted),
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: fetchUser,
+            tooltip: 'Refresh',
+          ),
+          IconButton(
+            icon: const Icon(Icons.logout),
+            onPressed: logout,
+            tooltip: 'Logout',
+          ),
+        ],
+      ),
+      body: isLoading
+        ? const Center(child: CircularProgressIndicator())
+        : RefreshIndicator(
+            onRefresh: fetchUser,
+            color: accentBlue,
+            child: SingleChildScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Welcome Section
+                  _buildWelcomeCard(),
+                  const SizedBox(height: 20),
+                  
+                  // Quick Stats
+                  _buildQuickStats(),
+                  const SizedBox(height: 24),
+                  
+                  // Quick Actions Grid
+                  SectionHeader(
+                    title: 'Quick Access',
+                    icon: Icons.dashboard,
+                  ),
+                  _buildQuickActionsGrid(),
+                  const SizedBox(height: 24),
+                  
+                  // Upcoming Events Section
+                  if (userEvents.isNotEmpty) ...[
+                    SectionHeader(
+                      title: 'Upcoming Events',
+                      icon: Icons.event,
+                      trailing: TextButton(
+                        onPressed: () => Navigator.pushNamed(context, '/all-events'),
+                        child: const Text('View All'),
+                      ),
+                    ),
+                    _buildUpcomingEvents(),
+                  ] else ...[
+                    SectionHeader(
+                      title: 'Events',
+                      icon: Icons.event,
+                    ),
+                    _buildNoEventsCard(),
+                  ],
+                ],
+              ),
+            ),
+          ),
+    );
+  }
+    final localStart = DateTime.parse(event['start']).toLocal();
+    final formatted = DateFormat('M/d @ h:mm a').format(localStart);
+
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: const Color(0xFF1E1E2E),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text(event['title'] ?? 'Event Details', style: const TextStyle(color: Colors.white)),
+        content: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Time: $formatted', style: const TextStyle(color: Colors.white70)),
+              const SizedBox(height: 8),
+              Text('Your Role: ${event['role'] ?? 'Unknown'}', style: const TextStyle(color: accentBlue)),
+              const SizedBox(height: 16),
+              if (event['description'] != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 16),
+                child: Html(
+                  data: event['description'],
+                  style: {
+                    '*': Style(color: Colors.white),
+                    'strong': Style(color: accentBlue, fontWeight: FontWeight.bold),
+                    'p': Style(color: Colors.white),
+                    'li': Style(color: Colors.white),
+                  },
+                ),
+              ),
+              if (event['eventImageUrl'] != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 16),
+                  child: Image.network(event['eventImageUrl']),
+                ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Close', style: TextStyle(color: accentBlue)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('TFIC Dashboard'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.logout),
+            onPressed: logout,
+          ),
+        ],
+      ),
+      body: Center(
+        child: isLoading
+            ? const CircularProgressIndicator()
+            : SingleChildScrollView(
+                padding: const EdgeInsets.all(16),
+                child: Card(
+                  color: bgCard,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  elevation: 8,
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (userData?['avatarUrl'] != null && userData!['avatarUrl'].toString().isNotEmpty)
+                          CircleAvatar(
+                            radius: 40,
+                            backgroundImage: NetworkImage(
+                              userData!['avatarUrl'].toString().startsWith('http')
+                                ? userData!['avatarUrl']
+                                : 'http://10.0.2.2:5000${userData!['avatarUrl']}',
+                            ),
+                          ),
+                        const SizedBox(height: 16),
+                        Text(
+                          'Welcome, ${userData?['username'] ?? 'Unknown'}',
+                          style: Theme.of(context)
+                              .textTheme
+                              .headlineSmall
+                              ?.copyWith(color: Colors.white),
+                        ),
+                        const SizedBox(height: 8),
+                        Container(
+                          margin: const EdgeInsets.only(top: 24),
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: bgCardHover,
+                            borderRadius: BorderRadius.circular(16),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withOpacity(0.2),
+                                blurRadius: 12,
+                                offset: const Offset(0, 4),
+                              ),
+                            ],
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Center(
+                                child: Text(
+                                  'User Information',
+                                  style: TextStyle(color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 16),
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+                              _infoRow('Game Name', userData?['gameUserName']),
+                              _infoRow('Discord', userData?['discordName']),
+                              _infoRow('Role', userData?['role']),
+                            ],
+                          ),
+                        ),
+                        if (userData?['primaryPositionTitle'] != null ||
+                          userData?['secondaryPositionTitle'] != null ||
+                          userData?['tertiaryPositionTitle'] != null)
+                        Container(
+                          margin: const EdgeInsets.only(top: 16),
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: bgCardHover,
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text('Your Positions', style: TextStyle(color: Colors.white70, fontWeight: FontWeight.bold)),
+                              const SizedBox(height: 12),
+                              if (userData?['primaryPositionTitle'] != null)
+                                _positionButton(
+                                  'Primary',
+                                  userData!['primaryPositionTitle'] ?? 'Unknown',
+                                  userData!['primaryPositionDescription'] ?? 'No description provided.',
+                                ),
+                              if (userData?['secondaryPositionTitle'] != null)
+                                _positionButton(
+                                  'Secondary',
+                                  userData!['secondaryPositionTitle'] ?? 'Unknown',
+                                  userData!['secondaryPositionDescription'] ?? 'No description provided.',
+                                ),
+                              if (userData?['tertiaryPositionTitle'] != null)
+                                _positionButton(
+                                  'Tertiary',
+                                  userData!['tertiaryPositionTitle'] ?? 'Unknown',
+                                  userData!['tertiaryPositionDescription'] ?? 'No description provided.',
+                                ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+                        
+                        // Medical SOS Quick Access Button
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton.icon(
+                            onPressed: () {
+                              Navigator.pushNamed(context, '/medical-sos');
+                            },
+                            icon: const Icon(Icons.medical_services, size: 24),
+                            label: const Text(
+                              '🚑 MEDICAL SOS',
+                              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                            ),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFFFF4444),
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 16),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+                        
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: TextButton(
+                            onPressed: () async {
+                              await Navigator.pushNamed(context, '/all-events');
+                              fetchUser(); // 🔄 Refresh your RSVP data after returning
+                            },
+                            child: const Text('View All Events', style: TextStyle(color: accentBlue)),
+                          ),
+                        ),
+                        if (userEvents.isEmpty)
+                          const Text('No upcoming RSVPs.', style: TextStyle(color: Colors.white70))
+                        else
+                          ...userEvents.map((event) {
+                           final localStart = DateTime.parse(event['start']).toLocal();
+                           final formatted = DateFormat('M/d @ h:mm a').format(localStart); // → 5/3 @ 6:00 PM
+
+                            return GestureDetector(
+                              onTap: () => _showEventDetailsModal(event),
+                              child: Container(
+                                margin: const EdgeInsets.symmetric(vertical: 4),
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: bgCardHover,
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(color: accentBlue.withOpacity(0.5)),
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(event['title'] ?? 'Unnamed Event',
+                                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                                    Text('Time: $formatted', style: const TextStyle(color: Colors.white70)),
+                                    Row(
+                                      children: [
+                                        if (event['roleIcon'] != null)
+                                          Padding(
+                                            padding: const EdgeInsets.only(right: 6),
+                                            child: Image.network(
+                                              event['roleIcon'],
+                                              width: 20,
+                                              height: 20,
+                                              errorBuilder: (_, __, ___) => const Icon(Icons.person, size: 20, color: accentBlue),
+                                            ),
+                                          ),
+                                        Text(
+                                          'Role: ${event['role'] ?? 'Unknown'}',
+                                          style: const TextStyle(color: accentBlue),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Align(
+                                      alignment: Alignment.centerRight,
+                                      child: TextButton(
+                                        onPressed: () async {
+                                          final success = await ApiService.cancelRsvp(event['id']);
+                                          if (success) {
+                                            ScaffoldMessenger.of(context).showSnackBar(
+                                              const SnackBar(content: Text('RSVP canceled.')),
+                                            );
+                                            fetchUser();
+                                          } else {
+                                            ScaffoldMessenger.of(context).showSnackBar(
+                                              const SnackBar(content: Text('Failed to cancel RSVP.')),
+                                            );
+                                          }
+                                        },
+                                        child: const Text('Cancel RSVP', style: TextStyle(color: Colors.redAccent)),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          }),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+      ),
+    );
+  }
+
+  // Welcome Card with user info
+  Widget _buildWelcomeCard() {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: accentBlue.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Icon(Icons.waving_hand, color: accentBlue, size: 32),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Welcome back!',
+                    style: TextStyle(color: textMuted, fontSize: 12),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    userData?['username'] ?? 'Member',
+                    style: const TextStyle(
+                      color: textPrimary,
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  if (userData?['gameUserName'] != null) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      '🎮 ${userData!['gameUserName']}',
+                      style: const TextStyle(color: textSecondary, fontSize: 13),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // Quick Stats Row
+  Widget _buildQuickStats() {
+    return Row(
+      children: [
+        Expanded(
+          child: StatsCard(
+            label: 'Events',
+            value: upcomingEventsCount.toString(),
+            icon: Icons.event,
+            color: accentBlue,
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: StatsCard(
+            label: 'Missions',
+            value: activeMissionsCount.toString(),
+            icon: Icons.flag,
+            color: warningColor,
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: StatsCard(
+            label: 'Points',
+            value: '0', // TODO: Get from API
+            icon: Icons.star,
+            color: successColor,
+          ),
+        ),
+      ],
+    );
+  }
+
+  // Quick Actions Grid
+  Widget _buildQuickActionsGrid() {
+    return GridView.count(
+      crossAxisCount: 2,
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      crossAxisSpacing: 12,
+      mainAxisSpacing: 12,
+      childAspectRatio: 1.1,
+      children: [
+        QuickActionCard(
+          icon: Icons.medical_services,
+          title: 'Medical SOS',
+          subtitle: 'Emergency assistance',
+          iconColor: medicalRed,
+          onTap: () => Navigator.pushNamed(context, '/medical-sos'),
+        ),
+        QuickActionCard(
+          icon: Icons.event,
+          title: 'Events',
+          subtitle: 'Browse & RSVP',
+          iconColor: accentBlue,
+          badgeCount: upcomingEventsCount,
+          onTap: () => Navigator.pushNamed(context, '/all-events'),
+        ),
+        QuickActionCard(
+          icon: Icons.flag,
+          title: 'Missions',
+          subtitle: 'View available',
+          iconColor: warningColor,
+          onTap: () {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Missions coming soon!')),
+            );
+          },
+        ),
+        QuickActionCard(
+          icon: Icons.person,
+          title: 'Profile',
+          subtitle: 'View & edit',
+          iconColor: successColor,
+          onTap: () {
+            // Show profile info (existing functionality)
+            _showProfileDialog();
+          },
+        ),
+      ],
+    );
+  }
+
+  // Upcoming Events List
+  Widget _buildUpcomingEvents() {
+    return Column(
+      children: userEvents.take(3).map((event) {
+        final localStart = DateTime.parse(event['start']).toLocal();
+        final formatted = DateFormat('MMM d @ h:mm a').format(localStart);
+        
+        return Card(
+          margin: const EdgeInsets.only(bottom: 12),
+          child: ListTile(
+            leading: Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: accentBlue.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(Icons.event, color: accentBlue, size: 24),
+            ),
+            title: Text(
+              event['title'] ?? 'Event',
+              style: const TextStyle(color: textPrimary, fontWeight: FontWeight.bold),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            subtitle: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const SizedBox(height: 4),
+                Text(
+                  formatted,
+                  style: const TextStyle(color: textSecondary, fontSize: 12),
+                ),
+                if (event['role'] != null) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    'Role: ${event['role']}',
+                    style: TextStyle(color: accentBlue.withOpacity(0.8), fontSize: 11),
+                  ),
+                ],
+              ],
+            ),
+            trailing: const Icon(Icons.chevron_right, color: textMuted),
+            onTap: () => _showEventDetails(event),
+          ),
+        );
+      }).toList(),
+    );
+  }
+
+  // No Events Card
+  Widget _buildNoEventsCard() {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: textMuted.withOpacity(0.1),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.event_busy, color: textMuted, size: 40),
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              'No Upcoming Events',
+              style: TextStyle(color: textPrimary, fontSize: 16, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Browse all events to RSVP',
+              style: TextStyle(color: textMuted, fontSize: 13),
+            ),
+            const SizedBox(height: 16),
+            ElevatedButton.icon(
+              onPressed: () => Navigator.pushNamed(context, '/all-events'),
+              icon: const Icon(Icons.search),
+              label: const Text('Browse Events'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // Event Details Dialog
+  void _showEventDetails(Map<String, dynamic> event) {
+    final localStart = DateTime.parse(event['start']).toLocal();
+    final formatted = DateFormat('MMMM d, yyyy @ h:mm a').format(localStart);
+
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: bgCard,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text(
+          event['title'] ?? 'Event Details',
+          style: const TextStyle(color: textPrimary),
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _buildEventDetailRow(Icons.access_time, 'Time', formatted),
+              if (event['role'] != null)
+                _buildEventDetailRow(Icons.badge, 'Your Role', event['role']),
+              if (event['description'] != null) ...[
+                const SizedBox(height: 16),
+                Text(
+                  event['description'].toString().replaceAll(RegExp(r'<[^>]*>'), ''),
+                  style: const TextStyle(color: textSecondary, fontSize: 13),
+                  maxLines: 5,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(context);
+              final success = await ApiService.cancelRsvp(event['id']);
+              if (success) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('RSVP canceled')),
+                  );
+                  fetchUser();
+                }
+              }
+            },
+            child: const Text('Cancel RSVP', style: TextStyle(color: dangerColor)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEventDetailRow(IconData icon, String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(
+        children: [
+          Icon(icon, color: accentBlue, size: 20),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: const TextStyle(color: textMuted, fontSize: 11),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  value,
+                  style: const TextStyle(color: textPrimary, fontSize: 14, fontWeight: FontWeight.w500),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Profile Dialog
+  void _showProfileDialog() {
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: bgCard,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Profile', style: TextStyle(color: textPrimary)),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (userData?['gameUserName'] != null)
+                _buildProfileRow('In-Game Name', userData!['gameUserName']),
+              if (userData?['discordName'] != null)
+                _buildProfileRow('Discord', userData!['discordName']),
+              if (userData?['role'] != null)
+                _buildProfileRow('Role', userData!['role']),
+              if (userData?['primaryPositionTitle'] != null) ...[
+                const Divider(height: 24, color: textMuted),
+                const Text('Positions', style: TextStyle(color: textMuted, fontSize: 12)),
+                const SizedBox(height: 8),
+                _buildPositionChip('Primary', userData!['primaryPositionTitle']),
+              ],
+              if (userData?['secondaryPositionTitle'] != null)
+                _buildPositionChip('Secondary', userData!['secondaryPositionTitle']),
+              if (userData?['tertiaryPositionTitle'] != null)
+                _buildPositionChip('Tertiary', userData!['tertiaryPositionTitle']),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildProfileRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 100,
+            child: Text(
+              '$label:',
+              style: const TextStyle(color: textMuted, fontSize: 13),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: const TextStyle(color: textPrimary, fontSize: 13, fontWeight: FontWeight.w500),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPositionChip(String level, String title) {
+    return Container(
+      margin: const EdgeInsets.only(top: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: accentBlue.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: accentBlue.withOpacity(0.3)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.badge, color: accentBlue, size: 16),
+          const SizedBox(width: 8),
+          Text(
+            '$level: ',
+            style: const TextStyle(color: textMuted, fontSize: 12),
+          ),
+          Expanded(
+            child: Text(
+              title,
+              style: const TextStyle(color: textPrimary, fontSize: 12, fontWeight: FontWeight.w500),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+    if (value == null || value.toString().isEmpty) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Text(
+            '$label: ',
+            style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.grey),
+          ),
+          Flexible(
+            child: Text(
+              value.toString(),
+              style: const TextStyle(color: Colors.white),
+              overflow: TextOverflow.ellipsis,
+              softWrap: true,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+  Widget _positionButton(String label, String title, String description) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: ElevatedButton.icon(
+        icon: const Icon(Icons.info_outline, size: 18),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: accentBlue.withOpacity(0.15),
+          foregroundColor: accentBlue,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        ),
+        label: Text('$label: $title', style: const TextStyle(fontWeight: FontWeight.bold)),
+        onPressed: () {
+          showDialog(
+            context: context,
+            builder: (_) => AlertDialog(
+              backgroundColor: const Color(0xFF1E1E2E),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              title: Text('$label Position', style: const TextStyle(color: Colors.white)),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, style: const TextStyle(color: accentBlue, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 12),
+                  Text(description, style: const TextStyle(color: Colors.white70)),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('Close', style: TextStyle(color: accentBlue)),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+
+  Widget _positionTag(String label, String value) {
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: accentBlue.withOpacity(0.1),
+        border: Border.all(color: accentBlue.withOpacity(0.5)),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.badge, size: 18, color: accentBlue),
+          const SizedBox(width: 8),
+          Flexible(
+            child: Text(
+              '$label: $value',
+              style: const TextStyle(color: Colors.white),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+}

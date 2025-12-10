@@ -3,10 +3,16 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:tficmobileapp/services/api_service.dart';
+import 'package:tficmobileapp/config/theme.dart';
 
 import 'package:tficmobileapp/screens/login_screen.dart';
 import 'package:tficmobileapp/screens/dashboard_screen.dart';
 import 'package:tficmobileapp/screens/all_events_screen.dart';
+import 'package:tficmobileapp/screens/medical_sos_screen.dart';
+import 'package:tficmobileapp/screens/missions_screen.dart';
+import 'package:tficmobileapp/screens/knowledge_base_screen.dart';
+import 'package:tficmobileapp/screens/feedback_screen.dart';
+import 'package:tficmobileapp/screens/user_profile_screen.dart';
 import 'package:tficmobileapp/utils/auth_storage.dart';
 
 final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
@@ -110,6 +116,11 @@ class MyApp extends StatelessWidget {
           '/dashboard': (context) => const DashboardScreen(),
           '/login': (context) => LoginScreen(),
           '/all-events': (context) => const AllEventsScreen(),
+          '/medical-sos': (context) => const MedicalSosScreen(),
+          '/missions': (context) => const MissionsScreen(),
+          '/knowledge-base': (context) => const KnowledgeBaseScreen(),
+          '/feedback': (context) => const FeedbackScreen(),
+          '/profile': (context) => const UserProfileScreen(),
         },
         home: FutureBuilder<bool>(
           future: AuthStorage.hasToken(),

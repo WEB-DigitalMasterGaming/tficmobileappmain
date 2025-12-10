@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_html/flutter_html.dart';
 import 'package:intl/intl.dart';
@@ -25,6 +26,8 @@ class _AllEventsScreenState extends State<AllEventsScreen> {
 
     events.sort((a, b) => DateTime.parse(a['start']).compareTo(DateTime.parse(b['start']))); // 👈 Sort chronologically
 
+    if (!mounted) return; // Check if widget is still mounted before calling setState
+    
     setState(() {
       allEvents = events;
       isLoading = false;
@@ -32,27 +35,38 @@ class _AllEventsScreenState extends State<AllEventsScreen> {
   }
 
 
-  void _showEventDetailsModal(Map<String, dynamic> event) {
+  void _showEventDetailsModal(Map<String, dynamic> event) async {
     final localStart = DateTime.parse(event['start']).toLocal();
     final formatted = DateFormat('M/d @ h:mm a').format(localStart);
+
+    // Fetch full event details with image if not already loaded
+    Map<String, dynamic> fullEvent = event;
+    if (event['eventImageUrl'] == null && event['id'] != null) {
+      final details = await ApiService.getEventById(event['id']);
+      if (details != null) {
+        fullEvent = details;
+      }
+    }
+
+    if (!mounted) return;
 
     showDialog(
       context: context,
       builder: (_) => AlertDialog(
         backgroundColor: const Color(0xFF1E1E2E),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text(event['title'] ?? 'Event Details', style: const TextStyle(color: Colors.white)),
+        title: Text(fullEvent['title'] ?? 'Event Details', style: const TextStyle(color: Colors.white)),
         content: SingleChildScrollView(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text('Time: $formatted', style: const TextStyle(color: Colors.white70)),
               const SizedBox(height: 8),
-              if (event['description'] != null)
+              if (fullEvent['description'] != null)
                 Padding(
                   padding: const EdgeInsets.only(top: 16),
                   child: Html(
-                    data: event['description'],
+                    data: fullEvent['description'],
                     style: {
                       '*': Style(color: Colors.white),
                       'strong': Style(color: Colors.deepPurpleAccent, fontWeight: FontWeight.bold),
@@ -61,10 +75,39 @@ class _AllEventsScreenState extends State<AllEventsScreen> {
                     },
                   ),
                 ),
-              if (event['eventImageUrl'] != null)
+              if (fullEvent['eventImageUrl'] != null)
                 Padding(
                   padding: const EdgeInsets.only(top: 16),
-                  child: Image.network(event['eventImageUrl']),
+                  child: Builder(
+                    builder: (context) {
+                      final rawUrl = fullEvent['eventImageUrl'].toString();
+                      
+                      // Handle base64 data URLs
+                      if (rawUrl.startsWith('data:image')) {
+                        try {
+                          final base64String = rawUrl.split(',').last;
+                          final bytes = base64Decode(base64String);
+                          return Image.memory(
+                            bytes,
+                            errorBuilder: (context, error, stackTrace) =>
+                                const Icon(Icons.image_not_supported, color: Colors.grey),
+                          );
+                        } catch (e) {
+                          return const Icon(Icons.image_not_supported, color: Colors.grey);
+                        }
+                      }
+                      
+                      // Handle regular URLs
+                      final imageUrl = rawUrl.startsWith('http')
+                          ? rawUrl
+                          : '${ApiService.baseUrl}$rawUrl';
+                      return Image.network(
+                        imageUrl,
+                        errorBuilder: (context, error, stackTrace) =>
+                            const Icon(Icons.image_not_supported, color: Colors.grey),
+                      );
+                    },
+                  ),
                 ),
               if (event['roles'] != null && event['roles'] is List)
                 Padding(
