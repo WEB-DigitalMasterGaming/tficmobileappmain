@@ -23,13 +23,21 @@ class _AllEventsScreenState extends State<AllEventsScreen> {
 
  Future<void> fetchEvents() async {
     final events = await ApiService.getAllEvents();
+    final now = DateTime.now();
+    final sevenDaysFromNow = now.add(const Duration(days: 7));
 
-    events.sort((a, b) => DateTime.parse(a['start']).compareTo(DateTime.parse(b['start']))); // 👈 Sort chronologically
+    // Filter to only show events within the next 7 days
+    final filteredEvents = events.where((event) {
+      final eventStart = DateTime.parse(event['start']);
+      return eventStart.isAfter(now) && eventStart.isBefore(sevenDaysFromNow);
+    }).toList();
+
+    filteredEvents.sort((a, b) => DateTime.parse(a['start']).compareTo(DateTime.parse(b['start']))); // 👈 Sort chronologically
 
     if (!mounted) return; // Check if widget is still mounted before calling setState
     
     setState(() {
-      allEvents = events;
+      allEvents = filteredEvents;
       isLoading = false;
     });
   }

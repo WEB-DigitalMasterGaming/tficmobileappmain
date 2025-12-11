@@ -458,33 +458,61 @@ class _KnowledgeBaseScreenState extends State<KnowledgeBaseScreen> {
                           '*': Style(
                             color: textPrimary,
                             fontSize: FontSize(15),
+                            margin: Margins.zero,
+                            padding: HtmlPaddings.zero,
+                          ),
+                          'body': Style(
+                            margin: Margins.zero,
+                            padding: HtmlPaddings.zero,
                           ),
                           'h1': Style(
                             color: textPrimary,
                             fontSize: FontSize(22),
                             fontWeight: FontWeight.bold,
-                            margin: Margins.only(top: 16, bottom: 8),
+                            margin: Margins.only(top: 12, bottom: 6),
                           ),
                           'h2': Style(
                             color: textPrimary,
                             fontSize: FontSize(20),
                             fontWeight: FontWeight.bold,
-                            margin: Margins.only(top: 14, bottom: 8),
+                            margin: Margins.only(top: 10, bottom: 6),
                           ),
                           'h3': Style(
                             color: textPrimary,
                             fontSize: FontSize(18),
                             fontWeight: FontWeight.bold,
-                            margin: Margins.only(top: 12, bottom: 6),
+                            margin: Margins.only(top: 8, bottom: 4),
+                          ),
+                          'h4': Style(
+                            color: textPrimary,
+                            fontSize: FontSize(16),
+                            fontWeight: FontWeight.bold,
+                            margin: Margins.only(top: 8, bottom: 4),
                           ),
                           'p': Style(
                             color: textSecondary,
-                            margin: Margins.only(bottom: 12),
-                            lineHeight: LineHeight(1.6),
+                            margin: Margins.only(bottom: 8),
+                            padding: HtmlPaddings.zero,
+                            lineHeight: LineHeight(1.5),
+                          ),
+                          'div': Style(
+                            margin: Margins.zero,
+                            padding: HtmlPaddings.zero,
+                          ),
+                          'br': Style(
+                            margin: Margins.zero,
+                            padding: HtmlPaddings.zero,
                           ),
                           'a': Style(
                             color: accentBlue,
                             textDecoration: TextDecoration.underline,
+                          ),
+                          'strong': Style(
+                            fontWeight: FontWeight.bold,
+                            color: textPrimary,
+                          ),
+                          'em': Style(
+                            fontStyle: FontStyle.italic,
                           ),
                           'code': Style(
                             backgroundColor: bgPrimary,
@@ -495,27 +523,33 @@ class _KnowledgeBaseScreenState extends State<KnowledgeBaseScreen> {
                           'pre': Style(
                             backgroundColor: bgPrimary,
                             padding: HtmlPaddings.all(12),
-                            margin: Margins.symmetric(vertical: 8),
+                            margin: Margins.only(top: 8, bottom: 8),
                             border: Border.all(color: textMuted.withOpacity(0.3)),
                           ),
                           'ul': Style(
                             color: textSecondary,
                             padding: HtmlPaddings.only(left: 20),
-                            margin: Margins.only(bottom: 12),
+                            margin: Margins.only(top: 4, bottom: 8),
                           ),
                           'ol': Style(
                             color: textSecondary,
                             padding: HtmlPaddings.only(left: 20),
-                            margin: Margins.only(bottom: 12),
+                            margin: Margins.only(top: 4, bottom: 8),
                           ),
                           'li': Style(
-                            margin: Margins.only(bottom: 6),
+                            margin: Margins.only(bottom: 4),
                           ),
                           'blockquote': Style(
                             backgroundColor: accentBlue.withOpacity(0.1),
                             border: Border(left: BorderSide(color: accentBlue, width: 4)),
                             padding: HtmlPaddings.all(12),
+                            margin: Margins.only(top: 8, bottom: 8),
+                          ),
+                          'hr': Style(
                             margin: Margins.symmetric(vertical: 12),
+                          ),
+                          'table': Style(
+                            margin: Margins.only(top: 8, bottom: 8),
                           ),
                         },
                       ),

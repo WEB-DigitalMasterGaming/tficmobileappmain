@@ -13,6 +13,8 @@ import 'package:tficmobileapp/screens/missions_screen.dart';
 import 'package:tficmobileapp/screens/knowledge_base_screen.dart';
 import 'package:tficmobileapp/screens/feedback_screen.dart';
 import 'package:tficmobileapp/screens/user_profile_screen.dart';
+import 'package:tficmobileapp/screens/onboarding_checklist_screen.dart';
+import 'package:tficmobileapp/screens/code_of_conduct_screen.dart';
 import 'package:tficmobileapp/utils/auth_storage.dart';
 
 final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
@@ -121,6 +123,8 @@ class MyApp extends StatelessWidget {
           '/knowledge-base': (context) => const KnowledgeBaseScreen(),
           '/feedback': (context) => const FeedbackScreen(),
           '/profile': (context) => const UserProfileScreen(),
+          '/onboarding-checklist': (context) => const OnboardingChecklistScreen(),
+          '/code-of-conduct': (context) => const CodeOfConductScreen(),
         },
         home: FutureBuilder<bool>(
           future: AuthStorage.hasToken(),

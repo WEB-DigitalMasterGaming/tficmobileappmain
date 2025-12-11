@@ -6,8 +6,9 @@ import 'dart:async';
 
 class TicketDetailScreen extends StatefulWidget {
   final int ticketId;
+  final Map<String, dynamic>? ticketData;
 
-  const TicketDetailScreen({super.key, required this.ticketId});
+  const TicketDetailScreen({super.key, required this.ticketId, this.ticketData});
 
   @override
   State<TicketDetailScreen> createState() => _TicketDetailScreenState();
@@ -23,6 +24,8 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
   bool _isSending = false;
   int? _currentUserId;
   bool _canManageTickets = false;
+  bool _canAccessMedicalReports = false;
+  String? _userRole;
   Timer? _refreshTimer;
 
   @override
@@ -57,43 +60,63 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
       final profile = await ApiService.getUserProfile();
       if (profile != null) {
         _currentUserId = profile['id'];
+        _userRole = profile['role'];
         
-        // Check if user has permission to manage medical tickets
+        // Check if user has permission to manage medical tickets or access reports
         final positions = profile['positions'] as List<dynamic>?;
         if (positions != null) {
           _canManageTickets = positions.any((pos) => pos['canManageMedicalTickets'] == true);
+          _canAccessMedicalReports = positions.any((pos) => pos['canAccessMedicalReports'] == true);
         }
       }
 
-      // Try to load ticket details
-      // First, try from available tickets (for medics)
-      try {
-        final availableTickets = await ApiService.getAvailableTickets();
-        _ticket = availableTickets
-            .map((t) => MedicalTicket.fromJson(t))
-            .firstWhere((t) => t.id == widget.ticketId, orElse: () {
-          throw Exception('Ticket not found in available tickets');
-        });
-      } catch (e) {
-        // If not available (user is not a medic), try to load their own ticket
-        final myTicketData = await ApiService.getMyActiveTicket();
-        if (myTicketData != null) {
-          final myTicket = MedicalTicket.fromJson(myTicketData);
-          if (myTicket.id == widget.ticketId) {
-            _ticket = myTicket;
+      // Use ticket data if provided, otherwise try to load from lists
+      if (widget.ticketData != null) {
+        _ticket = MedicalTicket.fromJson(widget.ticketData!);
+        debugPrint('🎫 Using provided ticket data: ${_ticket!.inGameUsername}');
+      } else {
+        // Fallback: Try to load from available tickets or user's ticket
+        debugPrint('🎫 No ticket data provided, attempting to load from lists');
+        try {
+          final availableTickets = await ApiService.getAvailableTickets();
+          _ticket = availableTickets
+              .map((t) => MedicalTicket.fromJson(t))
+              .firstWhere((t) => t.id == widget.ticketId, orElse: () {
+            throw Exception('Ticket not found in available tickets');
+          });
+        } catch (e) {
+          final myTicketData = await ApiService.getMyActiveTicket();
+          if (myTicketData != null) {
+            final myTicket = MedicalTicket.fromJson(myTicketData);
+            if (myTicket.id == widget.ticketId) {
+              _ticket = myTicket;
+            }
           }
         }
       }
 
-      // Load messages
-      if (_ticket != null) {
+      // Load messages ONLY if user has permission to view them
+      if (_ticket != null && _canViewMessages()) {
         await _loadMessages();
+      } else {
+        debugPrint('❌ Could not load ticket #${widget.ticketId}');
       }
     } catch (e) {
-      debugPrint('Error loading ticket: $e');
+      debugPrint('❌ Error loading ticket: $e');
     }
 
     setState(() => _isLoading = false);
+  }
+
+  // Check if user can view messages/chat
+  bool _canViewMessages() {
+    if (_ticket == null) return false;
+    
+    final isAssignedMedic = _currentUserId == _ticket!.assignedMedicId;
+    final isAdmin = _userRole == 'Admin';
+    final isCMO = _userRole == 'CMO';
+    
+    return isAssignedMedic || isAdmin || isCMO || _canAccessMedicalReports;
   }
 
   Future<void> _loadMessages({bool silent = false}) async {
@@ -309,27 +332,89 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
           // Ticket Info Header
           _buildTicketHeader(),
           
-          // Messages List
-          Expanded(
-            child: _messages.isEmpty
-                ? const Center(
-                    child: Text(
-                      'No messages yet',
-                      style: TextStyle(color: Colors.white54),
+          // Messages List - Only show if user has permission
+          if (_canViewMessages())
+            Expanded(
+              child: _messages.isEmpty
+                  ? const Center(
+                      child: Text(
+                        'No messages yet',
+                        style: TextStyle(color: Colors.white54),
+                      ),
+                    )
+                  : ListView.builder(
+                      controller: _scrollController,
+                      padding: const EdgeInsets.all(16),
+                      itemCount: _messages.length,
+                      itemBuilder: (context, index) {
+                        return _buildMessageBubble(_messages[index]);
+                      },
                     ),
-                  )
-                : ListView.builder(
-                    controller: _scrollController,
-                    padding: const EdgeInsets.all(16),
-                    itemCount: _messages.length,
-                    itemBuilder: (context, index) {
-                      return _buildMessageBubble(_messages[index]);
-                    },
+            )
+          else
+            // Show message for users without permission
+            Expanded(
+              child: Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.lock_outline, size: 64, color: Colors.white24),
+                      const SizedBox(height: 16),
+                      Text(
+                        'Chat Access Restricted',
+                        style: TextStyle(
+                          color: Colors.white70,
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Only assigned medics and authorized personnel can view the chat.',
+                        style: TextStyle(color: Colors.white38, fontSize: 14),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
                   ),
-          ),
+                ),
+              ),
+            ),
           
-          // Message Input
-          if (_ticket!.status != 'Completed' && _ticket!.status != 'Cancelled' && _ticket!.status != 'Archived')
+          // Chat Monitoring Notice - Only show if user has chat access
+          if (_canViewMessages())
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: const BoxDecoration(
+                color: Color(0xFF1A1A2E),
+                border: Border(
+                  top: BorderSide(color: Color(0xFF2A2A3E), width: 1),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.info_outline, size: 16, color: Colors.white38),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'This chat is monitored and may be reviewed by approved leadership and administrators.',
+                      style: TextStyle(
+                        color: Colors.white38,
+                        fontSize: 11,
+                        fontStyle: FontStyle.italic,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          
+          // Message Input - Only show if user has permission and ticket is active
+          if (_canViewMessages() && 
+              _ticket!.status != 'Completed' && 
+              _ticket!.status != 'Cancelled' && 
+              _ticket!.status != 'Archived')
             _buildMessageInput(),
         ],
       ),

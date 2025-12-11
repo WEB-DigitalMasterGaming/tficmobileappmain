@@ -3,6 +3,7 @@ import 'package:http/http.dart' as http;
 import 'package:flutter/foundation.dart';
 import 'package:tficmobileapp/utils/auth_storage.dart';
 import 'package:tficmobileapp/config/environment.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class ApiService {
   static String get baseUrl => Environment.apiUrl;
@@ -219,6 +220,9 @@ class ApiService {
 
       if (response.statusCode == 200) {
         debugPrint('✅ FCM token sent to backend.');
+      } else if (response.statusCode == 404) {
+        // Endpoint not implemented yet - silently ignore
+        debugPrint('⚠️ Push notification endpoint not available (404)');
       } else {
         debugPrint('❌ Failed to send FCM token: ${response.statusCode} - ${response.body}');
       }
@@ -274,22 +278,34 @@ class ApiService {
   static Future<List<Map<String, dynamic>>> getAllTicketHistory() async {
     try {
       final token = await AuthStorage.getToken();
-      if (token == null) return [];
+      if (token == null) {
+        debugPrint('🎫 No token found for ticket history');
+        return [];
+      }
+
+      final url = '$baseUrl/MedicalTickets/all-history';
+      debugPrint('🎫 Fetching ticket history: $url');
 
       final response = await http.get(
-        Uri.parse('$baseUrl/MedicalTickets/all'),
+        Uri.parse(url),
         headers: {
           'Authorization': 'Bearer $token',
           'Content-Type': 'application/json',
         },
       );
 
+      debugPrint('🎫 Ticket history response: ${response.statusCode}');
+      
       if (response.statusCode == 200) {
-        return List<Map<String, dynamic>>.from(json.decode(response.body));
+        final data = List<Map<String, dynamic>>.from(json.decode(response.body));
+        debugPrint('🎫 Found ${data.length} tickets in history');
+        return data;
+      } else {
+        debugPrint('🎫 Error response: ${response.body}');
+        return [];
       }
-      return [];
     } catch (e) {
-      debugPrint('Error getting all ticket history: $e');
+      debugPrint('❌ Error getting all ticket history: $e');
       return [];
     }
   }
@@ -723,18 +739,258 @@ class ApiService {
 
     try {
       final response = await http.get(
-        Uri.parse('$baseUrl/user/points-history'),
+        Uri.parse('$baseUrl/auth/user/points-history'),
+        headers: {'Authorization': 'Bearer $token'},
+      );
+
+      debugPrint('📊 Points history response: ${response.statusCode}');
+      
+      if (response.statusCode == 200) {
+        final List<dynamic> data = jsonDecode(response.body);
+        debugPrint('📊 Found ${data.length} point transactions');
+        return data.cast<Map<String, dynamic>>();
+      } else {
+        debugPrint('❌ Points history error: ${response.body}');
+      }
+      return [];
+    } catch (e) {
+      debugPrint('❌ Error fetching points history: $e');
+      return [];
+    }
+  }
+
+  // Get count of available (unclaimed) medical tickets
+  static Future<int> getAvailableTicketsCount() async {
+    final token = await AuthStorage.getToken();
+    if (token == null) return 0;
+
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/MedicalTickets/available'),
         headers: {'Authorization': 'Bearer $token'},
       );
 
       if (response.statusCode == 200) {
         final List<dynamic> data = jsonDecode(response.body);
-        return data.cast<Map<String, dynamic>>();
+        return data.length;
       }
-      return [];
+      return 0;
     } catch (e) {
-      debugPrint('Error fetching points history: $e');
-      return [];
+      debugPrint('Error fetching available tickets count: $e');
+      return 0;
+    }
+  }
+
+  // Get count of active missions for current user
+  static Future<int> getActiveMissionsCount() async {
+    final token = await AuthStorage.getToken();
+    if (token == null) return 0;
+
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/missions/me'),
+        headers: {'Authorization': 'Bearer $token'},
+      );
+
+      if (response.statusCode == 200) {
+        final List<dynamic> data = jsonDecode(response.body);
+        // Count missions that are not completed, failed, or released
+        return data.where((m) => 
+          m['status'] != 'Completed' && 
+          m['status'] != 'Failed' && 
+          m['status'] != 'Released'
+        ).length;
+      }
+      return 0;
+    } catch (e) {
+      debugPrint('Error fetching active missions count: $e');
+      return 0;
+    }
+  }
+
+  // Get required reading progress for current user
+  static Future<Map<String, dynamic>> getRequiredReadingProgress(String userType) async {
+    final token = await AuthStorage.getToken();
+    if (token == null) return {'totalRequired': 0, 'completed': 0, 'articles': []};
+
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/knowledgebase/articles/required/progress?userType=$userType'),
+        headers: {'Authorization': 'Bearer $token'},
+      );
+
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body);
+      }
+      return {'totalRequired': 0, 'completed': 0, 'articles': []};
+    } catch (e) {
+      debugPrint('Error fetching required reading progress: $e');
+      return {'totalRequired': 0, 'completed': 0, 'articles': []};
+    }
+  }
+
+  // Get onboarding checklist progress
+  static Future<Map<String, dynamic>> getOnboardingProgress(Map<String, dynamic> user) async {
+    try {
+      // Load SharedPreferences to get stored checklist progress
+      final prefs = await SharedPreferences.getInstance();
+      final userId = user['id'];
+      final storedJson = prefs.getString('onboarding_$userId');
+      Map<String, dynamic> storedProgress = {};
+      if (storedJson != null) {
+        storedProgress = jsonDecode(storedJson);
+      }
+
+      // Determine user type
+      final flags = user['flags'] as List<dynamic>? ?? [];
+      final hasOrgMember = flags.any((f) => f is Map && f['flag'] == 'OrgMember');
+      final isProspect = user['role'] == 'Prospect' || !hasOrgMember;
+      final isOrgMember = hasOrgMember;
+      
+      String userType = 'Member';
+      if (isProspect) {
+        userType = 'Prospect';
+      } else if (user['role'] == 'Leader' || user['role'] == 'Admin') {
+        userType = 'Leader';
+      }
+
+      // Get required reading progress
+      final readingProgress = await getRequiredReadingProgress(userType);
+      final isReadingComplete = (readingProgress['totalRequired'] ?? 0) > 0 && 
+                                (readingProgress['completed'] ?? 0) == (readingProgress['totalRequired'] ?? 0);
+
+      if (isProspect) {
+        // Pre-Member Checklist (Prospects)
+        // Use stored progress from SharedPreferences (matches website localStorage behavior)
+        
+        return {
+          'type': 'prospect',
+          'items': [
+            {
+              'id': 'codeOfConduct',
+              'title': 'Read Code of Conduct',
+              'description': 'Review and understand our community guidelines',
+              'completed': storedProgress['codeOfConduct'] ?? false,
+              'actionRoute': '/code-of-conduct',
+              'actionLabel': 'Read Now'
+            },
+            {
+              'id': 'discordVerified',
+              'title': 'Join Discord Server',
+              'description': 'Connect with the TFIC community on Discord',
+              'completed': storedProgress['discordVerified'] ?? false,
+              'actionRoute': 'https://discord.com/channels/1297670541846773922/1298346598673289216',
+              'actionLabel': 'Open Discord'
+            },
+            {
+              'id': 'joinedRSI',
+              'title': 'Join RSI Organization',
+              'description': 'Apply to TFIC on the RSI website',
+              'completed': storedProgress['joinedRSI'] ?? false,
+              'actionRoute': 'https://robertsspaceindustries.com/orgs/MASTERLS',
+              'actionLabel': 'Go to RSI'
+            },
+            {
+              'id': 'requiredReading',
+              'title': 'Complete Required Reading',
+              'description': '${readingProgress['completed'] ?? 0} of ${readingProgress['totalRequired'] ?? 0} articles read',
+              'completed': isReadingComplete,
+              'actionRoute': '/knowledge-base',
+              'actionLabel': 'View Articles'
+            },
+          ]
+        };
+      } else if (isOrgMember) {
+        // Getting Started Checklist (Members)
+        final hasProfile = user['gameUserName'] != null && user['discordName'] != null;
+        final hasDepartment = user['primaryPosition'] != null || 
+                            user['secondaryPosition'] != null || 
+                            user['tertiaryPosition'] != null;
+        final hasPoints = (user['orgPoints'] ?? 0) > 0;
+        
+        return {
+          'type': 'member',
+          'items': [
+            {
+              'id': 'profileComplete',
+              'title': 'Complete Your Profile',
+              'description': 'Add your game username and Discord name',
+              'completed': hasProfile,
+              'actionRoute': '/profile',
+              'actionLabel': 'Edit Profile'
+            },
+            {
+              'id': 'departmentJoined',
+              'title': 'Join a Department',
+              'description': 'Choose a department that matches your interests',
+              'completed': hasDepartment,
+              'actionRoute': '/positions',
+              'actionLabel': 'View Positions'
+            },
+            {
+              'id': 'eventRsvp',
+              'title': 'RSVP to an Event',
+              'description': 'Join your first TFIC event',
+              'completed': false, // Would need to check RSVP status
+              'actionRoute': '/events',
+              'actionLabel': 'Browse Events'
+            },
+            {
+              'id': 'pointsEarned',
+              'title': 'Earn ORG Points',
+              'description': 'Complete activities to earn your first points',
+              'completed': hasPoints,
+              'actionRoute': '/missions',
+              'actionLabel': 'View Missions'
+            },
+            {
+              'id': 'requiredReading',
+              'title': 'Complete Required Reading',
+              'description': '${readingProgress['completed'] ?? 0} of ${readingProgress['totalRequired'] ?? 0} articles read',
+              'completed': isReadingComplete,
+              'actionRoute': '/knowledge-base',
+              'actionLabel': 'View Articles'
+            },
+          ]
+        };
+      }
+
+      return {'type': 'none', 'items': []};
+    } catch (e) {
+      debugPrint('Error getting onboarding progress: $e');
+      return {'type': 'none', 'items': []};
+    }
+  }
+
+  // Mark onboarding checklist item as complete
+  static Future<bool> updateChecklistItem(String itemId, bool completed) async {
+    // Store in local preferences since backend stores onboarding completion as a flag
+    // The actual "complete onboarding" is called when all prospect steps are done
+    return true; // Local state management
+  }
+
+  // Complete onboarding (for prospects who finish all steps)
+  static Future<Map<String, dynamic>> completeOnboarding() async {
+    final token = await AuthStorage.getToken();
+    if (token == null) return {'success': false, 'message': 'Not authenticated'};
+
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/auth/user/complete-onboarding'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json'
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return {'success': true, 'message': data['message']};
+      }
+      return {'success': false, 'message': 'Failed to complete onboarding'};
+    } catch (e) {
+      debugPrint('Error completing onboarding: $e');
+      return {'success': false, 'message': 'Error: $e'};
     }
   }
 

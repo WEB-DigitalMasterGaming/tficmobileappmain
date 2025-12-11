@@ -1,17 +1,24 @@
 /// Environment configuration for API endpoints
 /// 
-/// To run against local development server:
-/// 1. Change `isDevelopment` to `true`
-/// 2. Update `localApiUrl` if your local server uses a different port
-/// 3. Run the app
+/// To switch environments:
+/// 1. Change `currentEnvironment` to your desired env (development, staging, or production)
+/// 2. For local dev, update `localApiUrl` if your server uses a different port
+/// 3. Rebuild the app
 /// 
-/// To switch back to production:
-/// 1. Change `isDevelopment` to `false`
-/// 2. Rebuild the app
+/// Environment hierarchy:
+/// - DEVELOPMENT: Local testing on your machine
+/// - STAGING: Test server (test.tficorg.org)
+/// - PRODUCTION: Live production server (tficorg.org)
+
+enum AppEnvironment {
+  development,
+  staging,
+  production,
+}
 
 class Environment {
-  // ⚠️ CHANGE THIS TO SWITCH BETWEEN DEV AND PROD
-  static const bool isDevelopment = false; // Set to true for local testing
+  // ⚠️ CHANGE THIS TO SWITCH ENVIRONMENTS
+  static const AppEnvironment currentEnvironment = AppEnvironment.staging;
   
   // Local development API (your localhost)
   static const String localApiUrl = 'http://10.0.2.2:5000/api'; // Android emulator
@@ -25,8 +32,30 @@ class Environment {
   static const String productionApiUrl = 'https://api.tficorg.org/api';
   
   // Current API URL based on environment
-  static String get apiUrl => isDevelopment ? localApiUrl : stagingApiUrl;
+  static String get apiUrl {
+    switch (currentEnvironment) {
+      case AppEnvironment.development:
+        return localApiUrl;
+      case AppEnvironment.staging:
+        return stagingApiUrl;
+      case AppEnvironment.production:
+        return productionApiUrl;
+    }
+  }
   
-  // Debug info
-  static String get environmentName => isDevelopment ? 'DEVELOPMENT' : 'STAGING';
+  // Environment info
+  static String get environmentName {
+    switch (currentEnvironment) {
+      case AppEnvironment.development:
+        return 'DEVELOPMENT';
+      case AppEnvironment.staging:
+        return 'STAGING';
+      case AppEnvironment.production:
+        return 'PRODUCTION';
+    }
+  }
+  
+  static bool get isDevelopment => currentEnvironment == AppEnvironment.development;
+  static bool get isStaging => currentEnvironment == AppEnvironment.staging;
+  static bool get isProduction => currentEnvironment == AppEnvironment.production;
 }

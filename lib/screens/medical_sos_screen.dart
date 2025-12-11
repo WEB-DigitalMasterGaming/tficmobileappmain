@@ -20,8 +20,9 @@ class _MedicalSosScreenState extends State<MedicalSosScreen> with SingleTickerPr
   bool _isLoading = true;
   bool _isLoadingAdmin = false;
   bool _canManageTickets = false;
+  bool _canAccessMedicalReports = false;
   TabController? _tabController;
-  int _tabCount = 2; // Default: My Ticket + Available (for medics)
+  int _tabCount = 1; // Default: My Ticket only
 
   @override
   void initState() {
@@ -40,25 +41,66 @@ class _MedicalSosScreenState extends State<MedicalSosScreen> with SingleTickerPr
     setState(() => _isLoading = true);
 
     try {
+      // Load user profile to check permissions
+      final userProfile = await ApiService.getUserProfile();
+      
+      if (userProfile != null) {
+        // Check if user is Admin or CMO
+        final isAdmin = userProfile['role'] == 'Admin';
+        final primaryPos = userProfile['primaryPosition'];
+        final isCMO = (primaryPos is Map && primaryPos['title']?.toString().toUpperCase() == 'CMO');
+        
+        // Check position-based permissions
+        final primaryPosition = userProfile['primaryPosition'];
+        final secondaryPosition = userProfile['secondaryPosition'];
+        final tertiaryPosition = userProfile['tertiaryPosition'];
+        final positions = [
+          primaryPosition is Map ? primaryPosition : null,
+          secondaryPosition is Map ? secondaryPosition : null,
+          tertiaryPosition is Map ? tertiaryPosition : null,
+        ];
+        final canManageMedical = isAdmin || isCMO || positions.any((pos) => pos != null && pos['canManageMedicalTickets'] == true);
+        
+        // Check flags
+        final flags = userProfile['flags'] as List<dynamic>? ?? [];
+        final canAccessReports = isAdmin || flags.any((f) => f is Map && f['flag'] == 'AccessMedicalReports');
+        
+        _canManageTickets = canManageMedical;
+        _canAccessMedicalReports = canAccessReports;
+        
+        // Determine tab count based on permissions
+        // Admins always have full access
+        if (isAdmin || canManageMedical) {
+          // Full access: My Ticket + Available + Admin + Reports
+          _tabCount = 4;
+        } else if (canAccessReports) {
+          // Reports only: My Ticket + Reports
+          _tabCount = 2;
+        } else {
+          // No special permissions: My Ticket only
+          _tabCount = 1;
+        }
+        
+        // Initialize tab controller
+        if (_tabController == null || _tabController!.length != _tabCount) {
+          _tabController?.dispose();
+          _tabController = TabController(length: _tabCount, vsync: this);
+        }
+      }
+      
       // Load user's active ticket
       final myTicketData = await ApiService.getMyActiveTicket();
       if (myTicketData != null) {
         _myActiveTicket = MedicalTicket.fromJson(myTicketData);
       }
 
-      // Try to load available tickets (only works if user has permission)
-      final availableData = await ApiService.getAvailableTickets();
-      if (availableData.isNotEmpty || availableData.isEmpty) {
-        // User has medic permissions if the endpoint doesn't throw 403
-        _canManageTickets = true;
-        _availableTickets = availableData.map((t) => MedicalTicket.fromJson(t)).toList();
-        
-        // Set tab count: My Ticket + Available + Admin + Reports = 4 tabs
-        _tabCount = 4;
-        
-        // Initialize tab controller for medics with admin access
-        if (_tabController == null) {
-          _tabController = TabController(length: _tabCount, vsync: this);
+      // Load available tickets only if user has permission
+      if (_canManageTickets) {
+        try {
+          final availableData = await ApiService.getAvailableTickets();
+          _availableTickets = availableData.map((t) => MedicalTicket.fromJson(t)).toList();
+        } catch (e) {
+          debugPrint('Error loading available tickets: $e');
         }
       }
     } catch (e) {
@@ -142,38 +184,32 @@ class _MedicalSosScreenState extends State<MedicalSosScreen> with SingleTickerPr
             },
           ),
         ],
-        bottom: _canManageTickets && _tabController != null
+        bottom: _tabController != null && _tabCount > 1
             ? TabBar(
                 controller: _tabController,
                 indicatorColor: accentBlue,
                 labelColor: accentBlue,
                 unselectedLabelColor: textMuted,
                 isScrollable: true,
-                tabs: const [
-                  Tab(text: 'My Ticket', icon: Icon(Icons.person, size: 18)),
-                  Tab(text: 'Available', icon: Icon(Icons.medical_services, size: 18)),
-                  Tab(text: 'Admin', icon: Icon(Icons.admin_panel_settings, size: 18)),
-                  Tab(text: 'Reports', icon: Icon(Icons.analytics, size: 18)),
-                ],
+                tabs: _buildTabs(),
                 onTap: (index) {
                   // Load data for tab on first access
-                  if (index == 2) _loadAllTicketsHistory();
-                  if (index == 3) _loadReports();
+                  if (_canManageTickets) {
+                    if (index == 2) _loadAllTicketsHistory();  // Admin tab
+                    if (index == 3) _loadReports();  // Reports tab
+                  } else if (_canAccessMedicalReports && index == 1) {
+                    _loadReports();  // Reports tab (for non-medics with report access)
+                  }
                 },
               )
             : null,
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator(color: accentBlue))
-          : _canManageTickets && _tabController != null
+          : _tabController != null && _tabCount > 1
               ? TabBarView(
                   controller: _tabController,
-                  children: [
-                    _buildMyTicketTab(),
-                    _buildAvailableTicketsTab(),
-                    _buildAdminTab(),
-                    _buildReportsTab(),
-                  ],
+                  children: _buildTabViews(),
                 )
               : RefreshIndicator(
                   onRefresh: _loadData,
@@ -185,6 +221,44 @@ class _MedicalSosScreenState extends State<MedicalSosScreen> with SingleTickerPr
                   ),
                 ),
     );
+  }
+
+  // Build tabs based on permissions
+  List<Widget> _buildTabs() {
+    final tabs = <Widget>[
+      const Tab(text: 'My Ticket', icon: Icon(Icons.person, size: 18)),
+    ];
+    
+    if (_canManageTickets) {
+      tabs.addAll([
+        const Tab(text: 'Available', icon: Icon(Icons.medical_services, size: 18)),
+        const Tab(text: 'Admin', icon: Icon(Icons.admin_panel_settings, size: 18)),
+        const Tab(text: 'Reports', icon: Icon(Icons.analytics, size: 18)),
+      ]);
+    } else if (_canAccessMedicalReports) {
+      tabs.add(const Tab(text: 'Reports', icon: Icon(Icons.analytics, size: 18)));
+    }
+    
+    return tabs;
+  }
+
+  // Build tab views based on permissions
+  List<Widget> _buildTabViews() {
+    final views = <Widget>[
+      _buildMyTicketTab(),
+    ];
+    
+    if (_canManageTickets) {
+      views.addAll([
+        _buildAvailableTicketsTab(),
+        _buildAdminTab(),
+        _buildReportsTab(),
+      ]);
+    } else if (_canAccessMedicalReports) {
+      views.add(_buildReportsTab());
+    }
+    
+    return views;
   }
 
   Widget _buildMyTicketTab() {
@@ -503,7 +577,10 @@ class _MedicalSosScreenState extends State<MedicalSosScreen> with SingleTickerPr
           final result = await Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (context) => TicketDetailScreen(ticketId: ticketData['id']),
+              builder: (context) => TicketDetailScreen(
+                ticketId: ticketData['id'],
+                ticketData: ticketData, // Pass the full ticket data
+              ),
             ),
           );
           if (result == true) {
@@ -560,9 +637,12 @@ class _MedicalSosScreenState extends State<MedicalSosScreen> with SingleTickerPr
                 children: [
                   const Icon(Icons.public, size: 14, color: textMuted),
                   const SizedBox(width: 6),
-                  Text(
-                    '${ticketData['currentSystem']} - ${ticketData['currentLocation']}',
-                    style: const TextStyle(color: textSecondary, fontSize: 13),
+                  Expanded(
+                    child: Text(
+                      '${ticketData['currentSystem']} - ${ticketData['currentLocation']}',
+                      style: const TextStyle(color: textSecondary, fontSize: 13),
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
                 ],
               ),
@@ -572,9 +652,12 @@ class _MedicalSosScreenState extends State<MedicalSosScreen> with SingleTickerPr
                   children: [
                     const Icon(Icons.medical_services, size: 14, color: successColor),
                     const SizedBox(width: 6),
-                    Text(
-                      'Medic: ${ticketData['assignedMedicUsername']}',
-                      style: const TextStyle(color: successColor, fontSize: 13),
+                    Expanded(
+                      child: Text(
+                        'Medic: ${ticketData['assignedMedicUsername']}',
+                        style: const TextStyle(color: successColor, fontSize: 13),
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
                   ],
                 ),

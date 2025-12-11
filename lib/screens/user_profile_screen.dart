@@ -112,6 +112,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
     final email = _userData?['email'];
     final discordUsername = _userData?['discordUsername'];
     final steamId = _userData?['steamId'];
+    final avatarUrl = _userData?['avatarUrl'];
 
     return Card(
       child: Padding(
@@ -123,11 +124,6 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
               width: 80,
               height: 80,
               decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [accentBlue, accentBlue.withOpacity(0.6)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
                 shape: BoxShape.circle,
                 boxShadow: [
                   BoxShadow(
@@ -137,16 +133,35 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                   ),
                 ],
               ),
-              child: Center(
-                child: Text(
-                  username.substring(0, 1).toUpperCase(),
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 36,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
+              child: avatarUrl != null && avatarUrl.toString().isNotEmpty
+                  ? CircleAvatar(
+                      radius: 40,
+                      backgroundImage: NetworkImage(
+                        avatarUrl.toString().startsWith('http')
+                            ? avatarUrl
+                            : '${ApiService.baseUrl}$avatarUrl',
+                      ),
+                    )
+                  : Container(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [accentBlue, accentBlue.withOpacity(0.6)],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Center(
+                        child: Text(
+                          username.substring(0, 1).toUpperCase(),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 36,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ),
             ),
             const SizedBox(height: 16),
             // Username
@@ -227,31 +242,32 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
           children: [
             Expanded(
               child: Column(
+                mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
                     children: [
                       Container(
-                        padding: const EdgeInsets.all(8),
+                        padding: const EdgeInsets.all(6),
                         decoration: BoxDecoration(
                           color: accentBlue.withOpacity(0.2),
                           borderRadius: BorderRadius.circular(8),
                         ),
-                        child: const Icon(Icons.star, color: accentBlue, size: 24),
+                        child: const Icon(Icons.star, color: accentBlue, size: 20),
                       ),
-                      const SizedBox(width: 12),
+                      const SizedBox(width: 8),
                       const Text(
                         'Org Points',
-                        style: TextStyle(color: textMuted, fontSize: 14),
+                        style: TextStyle(color: textMuted, fontSize: 13),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 8),
                   Text(
                     orgPoints.toString(),
                     style: const TextStyle(
                       color: textPrimary,
-                      fontSize: 36,
+                      fontSize: 32,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
@@ -265,37 +281,38 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
             ),
             Expanded(
               child: Column(
+                mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
                     children: [
                       const SizedBox(width: 12),
                       Container(
-                        padding: const EdgeInsets.all(6),
+                        padding: const EdgeInsets.all(5),
                         decoration: BoxDecoration(
                           color: warningColor.withOpacity(0.2),
                           borderRadius: BorderRadius.circular(8),
                         ),
-                        child: const Icon(Icons.event_available, color: warningColor, size: 20),
+                        child: const Icon(Icons.event_available, color: warningColor, size: 18),
                       ),
-                      const SizedBox(width: 8),
+                      const SizedBox(width: 6),
                       const Flexible(
                         child: Text(
                           'Events Attended',
-                          style: TextStyle(color: textMuted, fontSize: 13),
+                          style: TextStyle(color: textMuted, fontSize: 12),
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 8),
                   Padding(
                     padding: const EdgeInsets.only(left: 12),
                     child: Text(
                       eventsAttended.toString(),
                       style: const TextStyle(
                         color: textPrimary,
-                        fontSize: 36,
+                        fontSize: 32,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
@@ -352,31 +369,32 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
   }) {
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(8),
+        padding: const EdgeInsets.all(6),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
           children: [
             Container(
-              padding: const EdgeInsets.all(6),
+              padding: const EdgeInsets.all(5),
               decoration: BoxDecoration(
                 color: color.withOpacity(0.1),
                 borderRadius: BorderRadius.circular(6),
               ),
-              child: Icon(icon, color: color, size: 20),
+              child: Icon(icon, color: color, size: 18),
             ),
-            const SizedBox(height: 6),
+            const SizedBox(height: 4),
             Text(
               value,
               style: const TextStyle(
                 color: textPrimary,
-                fontSize: 18,
+                fontSize: 16,
                 fontWeight: FontWeight.bold,
               ),
             ),
             const SizedBox(height: 2),
             Text(
               label,
-              style: const TextStyle(color: textMuted, fontSize: 10),
+              style: const TextStyle(color: textMuted, fontSize: 9),
               textAlign: TextAlign.center,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
@@ -566,23 +584,31 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
             else
               Column(
                 children: _pointsHistory.map((transaction) {
+                  // Backend returns camelCase: amount, reason, createdAt
+                  final points = transaction['amount'] ?? 0;
+                  final isPositive = points > 0;
+                  final createdAt = transaction['createdAt'];
+                  final dateStr = createdAt != null 
+                    ? DateFormat('MMM d, yyyy').format(DateTime.parse(createdAt))
+                    : 'Unknown date';
+                  
                   return ListTile(
                     leading: Icon(
-                      transaction['points'] > 0 ? Icons.add_circle : Icons.remove_circle,
-                      color: transaction['points'] > 0 ? successColor : dangerColor,
+                      isPositive ? Icons.add_circle : Icons.remove_circle,
+                      color: isPositive ? successColor : dangerColor,
                     ),
                     title: Text(
                       transaction['reason'] ?? 'Points transaction',
                       style: const TextStyle(color: textPrimary, fontSize: 14),
                     ),
                     subtitle: Text(
-                      DateFormat('MMM d, yyyy').format(DateTime.parse(transaction['createdAt'])),
+                      dateStr,
                       style: const TextStyle(color: textMuted, fontSize: 12),
                     ),
                     trailing: Text(
-                      '${transaction['points'] > 0 ? '+' : ''}${transaction['points']}',
+                      '${isPositive ? '+' : ''}$points',
                       style: TextStyle(
-                        color: transaction['points'] > 0 ? successColor : dangerColor,
+                        color: isPositive ? successColor : dangerColor,
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
                       ),

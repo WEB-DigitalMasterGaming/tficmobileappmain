@@ -21,6 +21,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
   bool isLoading = true;
   int upcomingEventsCount = 0;
   int activeMissionsCount = 0;
+  int availableTicketsCount = 0;
+  
+  // Permission flags
+  bool _canManageMedicalTickets = false;
+  bool _canAccessMedicalReports = false;
+  bool _isOrgMember = false;
+  bool _canAccessMissions = false;
 
   @override
   void initState() {
@@ -29,10 +36,71 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Future<void> fetchUser() async {
-    final user = await ApiService.getUserProfile();
-    final events = await ApiService.getMyRsvpEvents();
+    // Fetch user and events in parallel
+    final results = await Future.wait([
+      ApiService.getUserProfile(),
+      ApiService.getMyRsvpEvents(),
+    ]);
+    
+    final user = results[0] as Map<String, dynamic>?;
+    final events = results[1] as List<Map<String, dynamic>>;
 
     events.sort((a, b) => DateTime.parse(a['start']).compareTo(DateTime.parse(b['start'])));
+
+    // Check permissions
+    bool canManageMedical = false;
+    bool canAccessReports = false;
+    bool isOrgMember = false;
+    bool canAccessMissions = false;
+    int availableTickets = 0;
+    int activeMissions = 0;
+
+    if (user != null) {
+      // Check if user is Admin or CMO
+      final isAdmin = user['role'] == 'Admin';
+      // Check if primaryPosition is a Map before accessing title
+      final primaryPos = user['primaryPosition'];
+      final isCMO = (primaryPos is Map && primaryPos['title']?.toString().toUpperCase() == 'CMO');
+      
+      // Check position-based permissions (handle both Map and null values)
+      final positions = [
+        user['primaryPosition'] is Map ? user['primaryPosition'] : null,
+        user['secondaryPosition'] is Map ? user['secondaryPosition'] : null,
+        user['tertiaryPosition'] is Map ? user['tertiaryPosition'] : null
+      ];
+      canManageMedical = isAdmin || isCMO || positions.any((pos) => pos != null && pos['canManageMedicalTickets'] == true);
+      
+      // Check flags (ensure each flag is a Map before accessing properties)
+      final flags = user['flags'] as List<dynamic>? ?? [];
+      canAccessReports = flags.any((f) => f is Map && f['flag'] == 'AccessMedicalReports');
+      isOrgMember = flags.any((f) => f is Map && f['flag'] == 'OrgMember');
+      final canAcceptMissions = flags.any((f) => f is Map && f['flag'] == 'CanAcceptMissions');
+      
+      // Check org points for Level 1+ (10+ points)
+      final orgPoints = user['orgPoints'] ?? 0;
+      final isLevel1OrHigher = orgPoints >= 10;
+      
+      // Can access missions if: Admin OR (OrgMember AND (Level1+ OR CanAcceptMissions flag))
+      canAccessMissions = isAdmin || (isOrgMember && (isLevel1OrHigher || canAcceptMissions));
+      
+      // Fetch badge counts in parallel if user has permissions
+      final badgeFutures = <Future<int>>[];
+      if (canManageMedical || isAdmin || canAccessReports) {
+        badgeFutures.add(ApiService.getAvailableTicketsCount());
+      } else {
+        badgeFutures.add(Future.value(0));
+      }
+      
+      if (canAccessMissions) {
+        badgeFutures.add(ApiService.getActiveMissionsCount());
+      } else {
+        badgeFutures.add(Future.value(0));
+      }
+      
+      final badgeCounts = await Future.wait(badgeFutures);
+      availableTickets = badgeCounts[0];
+      activeMissions = badgeCounts[1];
+    }
 
     if (!mounted) return; // Check if widget is still mounted before calling setState
     
@@ -40,6 +108,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
       userData = user;
       userEvents = events;
       upcomingEventsCount = events.length;
+      _canManageMedicalTickets = canManageMedical;
+      _canAccessMedicalReports = canAccessReports;
+      _isOrgMember = isOrgMember;
+      _canAccessMissions = canAccessMissions;
+      availableTicketsCount = availableTickets;
+      activeMissionsCount = activeMissions;
       isLoading = false;
     });
   }
@@ -327,6 +401,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   _buildWelcomeCard(),
                   const SizedBox(height: 20),
                   
+                  // Onboarding Checklist (if applicable)
+                  if (_shouldShowChecklist()) ...[
+                    _buildChecklistCard(),
+                    const SizedBox(height: 20),
+                  ],
+                  
                   // Quick Stats
                   _buildQuickStats(),
                   const SizedBox(height: 24),
@@ -400,13 +480,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       fontWeight: FontWeight.bold,
                     ),
                   ),
-                  if (userData?['gameUserName'] != null) ...[
-                    const SizedBox(height: 4),
-                    Text(
-                      '🎮 ${userData!['gameUserName']}',
-                      style: const TextStyle(color: textSecondary, fontSize: 13),
-                    ),
-                  ],
                 ],
               ),
             ),
@@ -450,8 +523,91 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  // Quick Actions Grid
+  // Quick Actions Grid - with permission-based visibility
   Widget _buildQuickActionsGrid() {
+    final List<Widget> actionCards = [];
+
+    // Medical SOS - show badge only to authorized users
+    actionCards.add(
+      QuickActionCard(
+        icon: Icons.medical_services,
+        title: 'Medical SOS',
+        subtitle: 'Emergency support',
+        iconColor: dangerColor,
+        badgeCount: (_canManageMedicalTickets || _canAccessMedicalReports || userData?['role'] == 'Admin') 
+            ? availableTicketsCount 
+            : null,
+        onTap: () async {
+          await Navigator.pushNamed(context, '/medical-sos');
+          fetchUser();
+        },
+      ),
+    );
+
+    // Events - everyone can see
+    actionCards.add(
+      QuickActionCard(
+        icon: Icons.event,
+        title: 'Events',
+        subtitle: 'View & RSVP',
+        badgeCount: upcomingEventsCount,
+        onTap: () async {
+          await Navigator.pushNamed(context, '/all-events');
+          fetchUser();
+        },
+      ),
+    );
+
+    // Missions - only show to authorized users (OrgMembers with Level 1+ or CanAcceptMissions flag)
+    if (_canAccessMissions) {
+      actionCards.add(
+        QuickActionCard(
+          icon: Icons.assignment,
+          title: 'Missions',
+          subtitle: 'Complete tasks',
+          iconColor: warningColor,
+          badgeCount: activeMissionsCount > 0 ? activeMissionsCount : null,
+          onTap: () async {
+            await Navigator.pushNamed(context, '/missions');
+            fetchUser();
+          },
+        ),
+      );
+    }
+
+    // Knowledge Base - everyone can see (content filtered by backend)
+    actionCards.add(
+      QuickActionCard(
+        icon: Icons.library_books,
+        title: 'Knowledge Base',
+        subtitle: 'Learn & explore',
+        iconColor: successColor,
+        onTap: () => Navigator.pushNamed(context, '/knowledge-base'),
+      ),
+    );
+
+    // Profile - everyone can see
+    actionCards.add(
+      QuickActionCard(
+        icon: Icons.person,
+        title: 'Profile',
+        subtitle: 'View & edit',
+        iconColor: accentBlue,
+        onTap: () => Navigator.pushNamed(context, '/profile'),
+      ),
+    );
+
+    // Feedback - everyone can see
+    actionCards.add(
+      QuickActionCard(
+        icon: Icons.feedback,
+        title: 'Feedback',
+        subtitle: 'Submit & view',
+        iconColor: const Color(0xFFFF9800),
+        onTap: () => Navigator.pushNamed(context, '/feedback'),
+      ),
+    );
+
     return GridView.count(
       crossAxisCount: 2,
       shrinkWrap: true,
@@ -459,53 +615,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       mainAxisSpacing: 12,
       crossAxisSpacing: 12,
       childAspectRatio: 1.1,
-      children: [
-        QuickActionCard(
-          icon: Icons.medical_services,
-          title: 'Medical SOS',
-          subtitle: 'Emergency support',
-          iconColor: dangerColor,
-          onTap: () => Navigator.pushNamed(context, '/medical-sos'),
-        ),
-        QuickActionCard(
-          icon: Icons.event,
-          title: 'Events',
-          subtitle: 'View & RSVP',
-          badgeCount: upcomingEventsCount,
-          onTap: () async {
-            await Navigator.pushNamed(context, '/all-events');
-            fetchUser();
-          },
-        ),
-        QuickActionCard(
-          icon: Icons.assignment,
-          title: 'Missions',
-          subtitle: 'Complete tasks',
-          iconColor: warningColor,
-          onTap: () => Navigator.pushNamed(context, '/missions'),
-        ),
-        QuickActionCard(
-          icon: Icons.library_books,
-          title: 'Knowledge Base',
-          subtitle: 'Learn & explore',
-          iconColor: successColor,
-          onTap: () => Navigator.pushNamed(context, '/knowledge-base'),
-        ),
-        QuickActionCard(
-          icon: Icons.person,
-          title: 'Profile',
-          subtitle: 'View & edit',
-          iconColor: accentBlue,
-          onTap: () => Navigator.pushNamed(context, '/profile'),
-        ),
-        QuickActionCard(
-          icon: Icons.feedback,
-          title: 'Feedback',
-          subtitle: 'Submit & view',
-          iconColor: const Color(0xFFFF9800),
-          onTap: () => Navigator.pushNamed(context, '/feedback'),
-        ),
-      ],
+      children: actionCards,
     );
   }
 
@@ -600,6 +710,148 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  // Check if user should see checklist
+  Future<bool> _shouldShowChecklistAsync() async {
+    if (userData == null) return false;
+
+    final role = userData!['role'];
+    final flags = userData!['flags'] as List<dynamic>? ?? [];
+    final isOrgMember = flags.any((f) => f is Map && f['flag'] == 'OrgMember');
+    final isProspect = role == 'Prospect';
+
+    // Don't show checklist for Admin or Leader
+    if (role == 'Admin' || role == 'Leader') return false;
+
+    // Don't show for non-prospects and non-members
+    if (!isProspect && !isOrgMember) return false;
+
+    // For prospects, check if they've completed all checklist items
+    if (isProspect) {
+      try {
+        final progress = await ApiService.getOnboardingProgress(userData!);
+        final items = progress['items'] as List<dynamic>? ?? [];
+        final allComplete = items.every((item) => item['completed'] == true);
+        return !allComplete; // Only show if not all complete
+      } catch (e) {
+        return true; // Show by default if we can't check
+      }
+    }
+
+    // Show checklist for new members who haven't completed onboarding
+    if (isOrgMember) {
+      final hasProfile = userData!['gameUserName'] != null && userData!['discordName'] != null;
+      final hasDepartment = userData!['primaryPosition'] != null || 
+                           userData!['secondaryPosition'] != null || 
+                           userData!['tertiaryPosition'] != null;
+      final hasPoints = (userData!['orgPoints'] ?? 0) > 0;
+
+      // Show if any of these are incomplete
+      return !hasProfile || !hasDepartment || !hasPoints;
+    }
+
+    return false;
+  }
+
+  // Synchronous wrapper for build method
+  bool _shouldShowChecklist() {
+    if (userData == null) return false;
+
+    final role = userData!['role'];
+    final flags = userData!['flags'] as List<dynamic>? ?? [];
+    final isOrgMember = flags.any((f) => f is Map && f['flag'] == 'OrgMember');
+    final isProspect = role == 'Prospect';
+    
+    // Debug logging
+    debugPrint('🔍 Checklist visibility check: role=$role, isOrgMember=$isOrgMember, isProspect=$isProspect');
+    debugPrint('🔍 Flags: ${flags.where((f) => f is Map).map((f) => f['flag']).toList()}');
+
+    // Don't show checklist for Admin, Leader, or established members
+    if (role == 'Admin' || role == 'Leader') {
+      debugPrint('🔍 Hiding checklist: User is $role');
+      return false;
+    }
+
+    // Don't show for users who are neither prospects nor new members
+    if (!isProspect && !isOrgMember) return false;
+
+    // For prospects, show by default (actual check happens on click)
+    if (isProspect) return true;
+
+    // Show checklist for new members who haven't completed onboarding
+    if (isOrgMember) {
+      final hasProfile = userData!['gameUserName'] != null && userData!['discordName'] != null;
+      final hasDepartment = userData!['primaryPosition'] != null || 
+                           userData!['secondaryPosition'] != null || 
+                           userData!['tertiaryPosition'] != null;
+      final hasPoints = (userData!['orgPoints'] ?? 0) > 0;
+
+      // Show if any of these are incomplete
+      return !hasProfile || !hasDepartment || !hasPoints;
+    }
+
+    return false;
+  }
+
+  // Build checklist card
+  Widget _buildChecklistCard() {
+    final flags = userData!['flags'] as List<dynamic>? ?? [];
+    final isOrgMember = flags.any((f) => f is Map && f['flag'] == 'OrgMember');
+    final title = isOrgMember ? 'Getting Started' : 'Pre-Member Checklist';
+    final subtitle = isOrgMember 
+        ? 'Complete your TFIC onboarding'
+        : 'Join TFIC as a full member';
+
+    return Card(
+      color: bgCard,
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: InkWell(
+        onTap: () async {
+          await Navigator.pushNamed(context, '/onboarding-checklist');
+          fetchUser(); // Refresh after returning
+        },
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: accentBlue.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(Icons.checklist, color: accentBlue, size: 28),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        color: textPrimary,
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      subtitle,
+                      style: const TextStyle(color: textMuted, fontSize: 13),
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(Icons.arrow_forward_ios, color: textMuted, size: 16),
+            ],
+          ),
         ),
       ),
     );
